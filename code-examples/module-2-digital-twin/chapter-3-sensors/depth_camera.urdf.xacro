@@ -1,0 +1,169 @@
+<?xml version="1.0"?>
+<!--
+Depth Camera Configuration for Chapter 3: Simulating Sensors
+Purpose: Add RGB-D camera (stereo depth) to humanoid robot
+Compatible: Gazebo Classic 11, ROS 2 Humble
+Sensor Model: Intel RealSense D435 (parameters approximation)
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Depth Camera Link (Physical Sensor Mount) -->
+  <link name="camera_depth_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.025 0.090 0.025"/> <!-- 2.5cm x 9cm x 2.5cm (RealSense dimensions) -->
+      </geometry>
+      <material name="camera_gray">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.025 0.090 0.025"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.072"/> <!-- 72 grams (RealSense D435 actual weight) -->
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.00001" ixy="0.0" ixz="0.0" iyy="0.00001" iyz="0.0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <!-- Optical Frame (Standard ROS convention for cameras) -->
+  <link name="camera_depth_optical_frame"/>
+
+  <!-- Joint Connecting Camera to Robot -->
+  <joint name="camera_depth_joint" type="fixed">
+    <parent link="torso_link"/> <!-- Change to head_link or desired mount point -->
+    <child link="camera_depth_link"/>
+    <origin xyz="0.1 0.0 0.4" rpy="0 0 0"/> <!-- 10cm forward, 40cm above torso -->
+  </joint>
+
+  <!-- Optical Frame Joint (ROS Camera Convention: X=right, Y=down, Z=forward) -->
+  <joint name="camera_depth_optical_joint" type="fixed">
+    <parent link="camera_depth_link"/>
+    <child link="camera_depth_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/> <!-- Rotate -90° Y, -90° Z -->
+  </joint>
+
+  <!-- Gazebo Depth Camera Plugin -->
+  <gazebo reference="camera_depth_link">
+    <sensor name="depth_camera" type="depth">
+      <!-- Update rate (Hz) - Standard video rate -->
+      <update_rate>30.0</update_rate>
+
+      <!-- Camera Intrinsics -->
+      <camera>
+        <!-- Horizontal field of view (radians) -->
+        <horizontal_fov>1.047</horizontal_fov> <!-- 60° (RealSense D435: 87° H, using conservative) -->
+
+        <!-- Image Dimensions (pixels) -->
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format> <!-- RGB color for color image -->
+        </image>
+
+        <!-- Clipping Planes (meters) - Valid depth range -->
+        <clip>
+          <near>0.3</near>  <!-- Minimum depth (RealSense D435: 0.3m min) -->
+          <far>5.0</far>    <!-- Maximum depth (D435 optimal: 3m, extended: 5m) -->
+        </clip>
+
+        <!-- Gaussian Noise (Depth Measurement) -->
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.02</stddev> <!-- ±2cm depth error (RealSense D435 spec at 2m) -->
+        </noise>
+      </camera>
+
+      <!-- ROS 2 Depth Camera Plugin -->
+      <plugin name="gazebo_ros_depth_camera" filename="libgazebo_ros_camera.so">
+        <ros>
+          <namespace>/robot</namespace>
+          <!-- Topic Remappings -->
+          <remapping>~/image_raw:=camera/rgb/image_raw</remapping>
+          <remapping>~/depth/image_raw:=camera/depth/image_raw</remapping>
+          <remapping>~/camera_info:=camera/rgb/camera_info</remapping>
+          <remapping>~/depth/camera_info:=camera/depth/camera_info</remapping>
+          <remapping>~/points:=camera/depth/points</remapping>
+        </ros>
+
+        <!-- Frame Names -->
+        <frame_name>camera_depth_optical_frame</frame_name>
+
+        <!-- Hack baseline (for stereo cameras, 0 for monocular depth) -->
+        <hack_baseline>0.0</hack_baseline>
+
+        <!-- Min depth (meters, overrides clip/near for point cloud generation) -->
+        <min_depth>0.3</min_depth>
+
+        <!-- Max depth (meters) -->
+        <max_depth>5.0</max_depth>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- Usage Instructions:
+
+  1. Include in main robot URDF:
+     <xacro:include filename="depth_camera.urdf.xacro"/>
+
+  2. Update parent link:
+     Change <parent link="torso_link"/> to desired mount (e.g., head_link)
+
+  3. Adjust camera pose:
+     Change <origin xyz="0.1 0.0 0.4"/> to point camera forward/downward
+
+  4. Launch Gazebo with robot:
+     ros2 launch your_package gazebo.launch.py
+
+  5. Verify topics publishing:
+     ros2 topic list | grep camera
+     # Expected outputs:
+     # /robot/camera/rgb/image_raw (sensor_msgs/Image - color)
+     # /robot/camera/depth/image_raw (sensor_msgs/Image - 16-bit depth)
+     # /robot/camera/depth/points (sensor_msgs/PointCloud2 - 3D points)
+     # /robot/camera/rgb/camera_info (sensor_msgs/CameraInfo - intrinsics)
+
+  6. Visualize in RViz:
+     ros2 run rviz2 rviz2
+     # Add > Image > Topic: /robot/camera/rgb/image_raw (RGB view)
+     # Add > Image > Topic: /robot/camera/depth/image_raw (grayscale depth map)
+     # Add > PointCloud2 > Topic: /robot/camera/depth/points (3D point cloud)
+
+  Expected Output:
+  - RGB Image: 640x480 color image at 30 Hz
+  - Depth Image: 640x480 grayscale (closer objects = darker pixels)
+  - Point Cloud: ~307,200 points (640×480) in camera_depth_optical_frame
+
+  Troubleshooting:
+  - No images published: Check plugin filename libgazebo_ros_camera.so exists
+    Verify: ls /opt/ros/humble/lib/libgazebo_ros_camera.so
+
+  - Depth image is black: All pixels beyond max_depth (5m) or before min_depth (0.3m)
+    Solution: Adjust <clip><near> and <far> to match scene, or move obstacles into range
+
+  - Point cloud empty: Depth values invalid (all inf or NaN)
+    Solution: Check camera is not inside collision mesh, verify <clip> planes
+
+  - High CPU/GPU usage: 640x480 at 30 Hz is computationally expensive
+    Solution: Reduce resolution to 320x240 or update_rate to 15 Hz
+
+  - Depth accuracy poor: Noise stddev too high (0.02m)
+    Solution: Reduce <stddev> to 0.01m for higher precision (but less realistic)
+
+  Camera Coordinate Frame Convention (ROS):
+  - X-axis: Right
+  - Y-axis: Down
+  - Z-axis: Forward (optical axis)
+  This is why optical_joint rotates -90° around Y and Z axes.
+
+  -->
+
+</robot>

@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<!--
+IMU Sensor Configuration for Chapter 3: Simulating Sensors
+Purpose: Add Inertial Measurement Unit to humanoid robot
+Compatible: Gazebo Classic 11, ROS 2 Humble
+Sensor Model: Bosch BMI088 6-axis IMU (parameters from datasheet)
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- IMU Link (Physical Sensor Mount - typically small PCB) -->
+  <link name="imu_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.01 0.005"/> <!-- 1cm x 1cm x 0.5cm PCB -->
+      </geometry>
+      <material name="imu_green">
+        <color rgba="0.0 0.6 0.0 1.0"/> <!-- Green PCB -->
+      </material>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.01 0.005"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.005"/> <!-- 5 grams -->
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.000001" ixy="0.0" ixz="0.0" iyy="0.000001" iyz="0.0" izz="0.000001"/>
+    </inertial>
+  </link>
+
+  <!-- Joint Connecting IMU to Robot Base (typically torso or base_link) -->
+  <joint name="imu_joint" type="fixed">
+    <parent link="torso_link"/> <!-- Change to base_link or torso_link -->
+    <child link="imu_link"/>
+    <origin xyz="0.0 0.0 0.05" rpy="0 0 0"/> <!-- 5cm above torso center -->
+  </joint>
+
+  <!-- Gazebo IMU Plugin -->
+  <gazebo reference="imu_link">
+    <sensor name="imu_sensor" type="imu">
+      <!-- Update rate (Hz) - High frequency for control loops -->
+      <update_rate>100.0</update_rate>
+
+      <!-- Always on (no activation condition) -->
+      <always_on>true</always_on>
+
+      <!-- IMU Plugin Configuration -->
+      <plugin name="gazebo_ros_imu_sensor" filename="libgazebo_ros_imu_sensor.so">
+        <ros>
+          <namespace>/robot</namespace>
+          <remapping>~/out:=imu/data</remapping> <!-- Publishes to /robot/imu/data -->
+        </ros>
+
+        <!-- TF frame for sensor data -->
+        <frame_name>imu_link</frame_name>
+
+        <!-- Initial Orientation Reference -->
+        <!-- false: Orientation relative to world frame (gravity in Z) -->
+        <!-- true: Orientation relative to initial sensor pose -->
+        <initial_orientation_as_reference>false</initial_orientation_as_reference>
+
+        <!-- Noise Models (from Bosch BMI088 Datasheet) -->
+
+        <!-- Angular Velocity Noise (Gyroscope) -->
+        <!-- Datasheet: 0.014 rad/s/√Hz at 100 Hz -->
+        <angular_velocity_stdev>0.014</angular_velocity_stdev> <!-- rad/s -->
+
+        <!-- Linear Acceleration Noise (Accelerometer) -->
+        <!-- Datasheet: 150 μg/√Hz ≈ 0.05 m/s²/√Hz at 100 Hz -->
+        <linear_acceleration_stdev>0.05</linear_acceleration_stdev> <!-- m/s² -->
+
+        <!-- Orientation Noise (Sensor Fusion Output) -->
+        <!-- Computed from gyro integration: ~0.01 rad -->
+        <orientation_stdev>0.01</orientation_stdev> <!-- radians -->
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- Usage Instructions:
+
+  1. Include in main robot URDF:
+     <xacro:include filename="imu_sensor.urdf.xacro"/>
+
+  2. Update parent link:
+     Change <parent link="torso_link"/> to robot base or torso
+
+  3. Adjust mounting position:
+     Mount IMU close to center of mass for accurate acceleration measurements
+
+  4. Launch Gazebo:
+     ros2 launch your_package gazebo.launch.py
+
+  5. Verify topic publishing:
+     ros2 topic hz /robot/imu/data
+     # Expected: average rate: 100.000 Hz
+
+  6. Check IMU output:
+     ros2 topic echo /robot/imu/data --once
+     # Expected fields:
+     # - orientation: Quaternion (x, y, z, w) - robot attitude
+     # - angular_velocity: Vector3 (x, y, z) rad/s - rotation rates
+     # - linear_acceleration: Vector3 (x, y, z) m/s² - includes gravity (z ≈ 9.81 when stationary)
+
+  Expected Output:
+  - Topic: /robot/imu/data (sensor_msgs/Imu)
+  - Update rate: 100 Hz
+  - Orientation: Quaternion with norm ≈ 1.0 (valid quaternion)
+  - Angular velocity: Near zero when robot not rotating
+  - Linear acceleration Z: ≈ 9.81 m/s² when stationary (gravity)
+
+  Validation:
+  - Orientation accuracy: Compare to known robot pose from /tf
+  - Gyro noise: Record 1000 samples when stationary, compute std dev, should match 0.014 rad/s
+  - Accel noise: Record 1000 samples, std dev should match 0.05 m/s²
+
+  Troubleshooting:
+  - No data published: Check plugin libgazebo_ros_imu_sensor.so exists
+    Verify: ls /opt/ros/humble/lib/libgazebo_ros_imu_sensor.so
+
+  - Orientation quaternion invalid (norm ≠ 1.0): Numerical integration error
+    Solution: Reduce Gazebo timestep to 0.001s or lower
+
+  - Linear acceleration Z ≠ 9.81 when stationary: Gravity direction wrong
+    Solution: Check Gazebo world <gravity>0 0 -9.81</gravity> (Z-axis up)
+
+  - Gyro drifts over time: Bias instability (realistic for MEMS IMU)
+    Solution: Use robot_localization package for sensor fusion with wheel odometry
+
+  - High noise (σ > configured): Gazebo simulation timestep too large
+    Solution: Reduce <max_step_size> in world file to 0.001s or 0.0005s
+
+  IMU Coordinate Frame Convention (ROS REP-103):
+  - X-axis: Forward
+  - Y-axis: Left
+  - Z-axis: Up
+  Gravity vector appears as linear_acceleration.z = 9.81 m/s² when robot stationary.
+
+  Sensor Fusion Note:
+  This IMU plugin outputs orientation (from Gazebo's ground truth) + noisy angular velocity + noisy acceleration.
+  For realistic IMU behavior (orientation from gyro integration), consider using ADIS16448 plugin or custom EKF.
+
+  -->
+
+</robot>

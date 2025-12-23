@@ -1,0 +1,146 @@
+<?xml version="1.0"?>
+<!--
+LiDAR Sensor Configuration for Chapter 3: Simulating Sensors
+Purpose: Add 2D LiDAR (360° planar laser scanner) to humanoid robot
+Compatible: Gazebo Classic 11, ROS 2 Humble
+Sensor Model: Velodyne VLP-16 (parameters approximation)
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- LiDAR Link (Physical Sensor Mount) -->
+  <link name="lidar_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.08"/> <!-- 5cm radius, 8cm height -->
+      </geometry>
+      <material name="lidar_black">
+        <color rgba="0.1 0.1 0.1 1.0"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.08"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.2"/> <!-- 200 grams -->
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <!-- Joint Connecting LiDAR to Robot (e.g., torso_link or head_link) -->
+  <joint name="lidar_joint" type="fixed">
+    <parent link="torso_link"/> <!-- Change to your robot's mounting link -->
+    <child link="lidar_link"/>
+    <origin xyz="0.0 0.0 0.3" rpy="0 0 0"/> <!-- 30cm above torso, adjust as needed -->
+  </joint>
+
+  <!-- Gazebo Sensor Plugin -->
+  <gazebo reference="lidar_link">
+    <sensor name="lidar_sensor" type="ray">
+      <!-- Update rate (Hz) - Publishing frequency -->
+      <update_rate>10.0</update_rate>
+
+      <!-- Visualize rays in Gazebo GUI (red lines) -->
+      <visualize>true</visualize>
+
+      <!-- Ray Configuration -->
+      <ray>
+        <scan>
+          <!-- Horizontal Scan (360° planar) -->
+          <horizontal>
+            <samples>360</samples>          <!-- Number of rays (1° resolution) -->
+            <resolution>1</resolution>      <!-- Always 1 for accurate sampling -->
+            <min_angle>-3.14159</min_angle> <!-- -180° -->
+            <max_angle>3.14159</max_angle>  <!-- +180° -->
+          </horizontal>
+
+          <!-- Vertical Scan (1 for 2D LiDAR) -->
+          <vertical>
+            <samples>1</samples>
+            <resolution>1</resolution>
+            <min_angle>0</min_angle>
+            <max_angle>0</max_angle>
+          </vertical>
+        </scan>
+
+        <!-- Range Configuration (meters) -->
+        <range>
+          <min>0.5</min>  <!-- Minimum valid distance (deadzone inside 50cm) -->
+          <max>10.0</max> <!-- Maximum detection range -->
+          <resolution>0.01</resolution> <!-- Distance precision (1cm) -->
+        </range>
+
+        <!-- Gaussian Noise Model -->
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>         <!-- No systematic bias -->
+          <stddev>0.01</stddev>    <!-- ±1cm standard deviation (Velodyne VLP-16 spec) -->
+        </noise>
+      </ray>
+
+      <!-- ROS 2 Plugin -->
+      <plugin name="gazebo_ros_lidar" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <namespace>/robot</namespace>
+          <remapping>~/out:=scan</remapping> <!-- Publishes to /robot/scan -->
+        </ros>
+
+        <!-- Output message type -->
+        <output_type>sensor_msgs/LaserScan</output_type>
+
+        <!-- TF frame for sensor data -->
+        <frame_name>lidar_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- Usage Instructions:
+
+  1. Include in main robot URDF:
+     <xacro:include filename="lidar_sensor.urdf.xacro"/>
+
+  2. Update parent link name:
+     Change <parent link="torso_link"/> to your robot's mounting point
+
+  3. Adjust mounting position:
+     Change <origin xyz="0.0 0.0 0.3"/> to desired position
+
+  4. Launch Gazebo:
+     ros2 launch your_package gazebo.launch.py
+
+  5. Verify topic publishing:
+     ros2 topic hz /robot/scan
+     # Expected: average rate: 10.000 Hz
+
+  6. Visualize in RViz:
+     ros2 run rviz2 rviz2
+     # Add > LaserScan > Topic: /robot/scan
+     # Should show red rays in 360° pattern
+
+  Expected Output:
+  - Topic: /robot/scan (sensor_msgs/LaserScan)
+  - Update rate: 10 Hz
+  - Ranges: 360 floats (0.5-10.0 meters or inf for no return)
+  - Angle increment: 0.01745 rad (1°)
+
+  Troubleshooting:
+  - No data published: Check plugin filename libgazebo_ros_ray_sensor.so exists
+    Verify: ls /opt/ros/humble/lib/libgazebo_ros_ray_sensor.so
+
+  - All ranges return 'inf': No obstacles in 0.5-10m range, or rays pointing wrong direction
+    Solution: Add test wall 5m from robot, check lidar_link orientation
+
+  - High CPU usage: Too many samples (360) or update rate too high (10 Hz)
+    Solution: Reduce samples to 180 (2° resolution) or update_rate to 5 Hz
+
+  - Noise too high/low: Measured σ doesn't match 0.01m configured
+    Solution: Record 100 samples, compute std dev, adjust <stddev> accordingly
+  -->
+
+</robot>

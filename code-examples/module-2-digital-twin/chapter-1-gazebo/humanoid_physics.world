@@ -1,0 +1,129 @@
+<?xml version="1.0" ?>
+<!--
+Humanoid Physics World for Chapter 1
+Purpose: Demonstrates humanoid robot with physics properties (contact, friction)
+Compatible: Gazebo Classic 11, ROS 2 Humble
+Note: Requires humanoid.urdf from Module 1 (place in same directory or update path)
+-->
+<sdf version="1.6">
+  <world name="humanoid_physics_world">
+
+    <!-- Physics Configuration -->
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000.0</real_time_update_rate>
+      <gravity>0 0 -9.81</gravity>
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>50</iters>
+          <sor>1.3</sor>
+        </solver>
+        <constraints>
+          <cfm>0.0</cfm>
+          <erp>0.2</erp>
+          <contact_max_correcting_vel>100.0</contact_max_correcting_vel>
+          <contact_surface_layer>0.001</contact_surface_layer>
+        </constraints>
+      </ode>
+    </physics>
+
+    <!-- Ground Plane with High Friction (prevents sliding) -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>100 100</size></plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>1.0</mu>   <!-- High friction for humanoid feet -->
+                <mu2>1.0</mu2>
+              </ode>
+            </friction>
+            <contact>
+              <ode>
+                <kp>1000000.0</kp>  <!-- Rigid contact -->
+                <kd>1.0</kd>         <!-- Light damping -->
+              </ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>100 100</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.3 0.3 0.3 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Sun Lighting -->
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <!-- Demonstration Box (for physics testing before loading humanoid) -->
+    <model name="test_box">
+      <pose>0 0 1.0 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>1.0</mass>
+          <inertia>
+            <ixx>0.167</ixx><iyy>0.167</iyy><izz>0.167</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>1 1 1</size></box></geometry>
+          <surface>
+            <friction><ode><mu>0.8</mu><mu2>0.8</mu2></ode></friction>
+            <bounce><restitution_coefficient>0.0</restitution_coefficient></bounce>
+            <contact><ode><kp>1e6</kp><kd>1.0</kd></ode></contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1 1 1</size></box></geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>
+            <diffuse>1 0 0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Scene Configuration -->
+    <scene>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- GUI Camera -->
+    <gui fullscreen='0'>
+      <camera name='user_camera'>
+        <pose>3 -3 2 0 0.3 2.356</pose>
+        <view_controller>orbit</view_controller>
+      </camera>
+    </gui>
+
+    <!-- Usage Instructions:
+    1. Launch world: gazebo humanoid_physics.world
+    2. Observe test_box falling and colliding with ground (validates physics config)
+    3. Spawn humanoid robot from Module 1:
+       ros2 run gazebo_ros spawn_entity.py -entity humanoid -file humanoid.urdf -z 1.0
+    4. Expected behavior:
+       - Box falls at 9.81 m/s², hits ground at t ≈ 0.45s
+       - No penetration into ground (rigid contact)
+       - Box does not bounce (restitution = 0.0)
+       - High friction prevents sliding on 10° incline
+    -->
+
+  </world>
+</sdf>
