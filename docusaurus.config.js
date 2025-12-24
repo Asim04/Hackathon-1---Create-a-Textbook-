@@ -6,7 +6,16 @@
 
 import {themes as prismThemes} from 'prism-react-renderer';
 
+/**
+ * Environment detect karne ke liye
+ * true = Vercel deploy
+ * false = Local / GitHub Pages
+ */
+const isVercel = process.env.VERCEL === '1';
+
 /** @type {import('@docusaurus/types').Config} */
+
+
 const config = {
   title: 'Physical AI & Humanoid Robotics',
   tagline: 'A Comprehensive Textbook on Physical AI and Humanoid Robotics',
@@ -16,15 +25,24 @@ const config = {
 
   // Set the production url of your site here
   // TODO: Replace 'your-org' with actual GitHub username
-  url: 'https://your-org.github.io',
+  // url: 'https://your-org.github.io',
+  // url: 'https://hackathon-1-create-a-textbook-whe5.vercel.app',
+
+  // Production URL
+  url: isVercel
+    ? 'https://hackathon-1-create-a-textbook-whe5.vercel.app' // Vercel URL
+    : 'https://your-org.github.io', // GitHub Pages URL
+
+  baseUrl: isVercel ? '/' : '/book-ai/',
 
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   // This MUST match your GitHub repository name exactly
   // Current: '/book-ai/' - update if repository name is different
-  baseUrl: '/book-ai/',
+  // baseUrl: '/book-ai/', // for git pages deploy.
 
-  // GitHub pages deployment config.
+  
+    // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
   // TODO: Replace 'your-org' with actual GitHub username
   organizationName: 'your-org', // Usually your GitHub org/user name.
@@ -50,7 +68,7 @@ const config = {
         docs: {
           // KEY FIX: Serve docs at root path instead of /docs/ prefix
           // This eliminates the need for /docs/ in URLs (e.g., /intro instead of /docs/intro)
-          routeBasePath: '/',
+          routeBasePath: '/',    // Serve docs at root
           sidebarPath: './sidebars.js',
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
